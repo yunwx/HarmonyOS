@@ -1,5 +1,5 @@
 import { ME, Title} from '../model/CommonStyle'
-import { Send } from '../model/Send';
+import {  Send } from '../model/Send';
 import { DataDialog, HomeDialog } from './Dialog';
 
 
@@ -8,7 +8,7 @@ import { DataDialog, HomeDialog } from './Dialog';
 struct HomePage{
   private tabsController : TabsController = new TabsController()
   @State currentIndex:number = 0;
-  @State birthday: string | undefined = AppStorage.get('birthday');
+  @State name: string | undefined = AppStorage.get('name');
 
   dialogController: CustomDialogController  = new CustomDialogController({
     builder: HomeDialog(),
@@ -20,7 +20,7 @@ struct HomePage{
   })
 
 aboutToAppear(): void {
-    if(this.birthday!=undefined && this.birthday.length==0){
+    if(this.name!=undefined && this.name.length==0){
       this.dialogController.open()
     }
 }

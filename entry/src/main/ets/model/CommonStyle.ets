@@ -33,7 +33,7 @@ export struct ME {
   @StorageLink('birthday') birthday: string = ''
   @StorageLink('gender') gender: string = ''
   @StorageLink('interests') interests: string = ''
-  @State interestsArray: Array<string> = this.interests.split(',')
+  @State interestsArray: Array<string> = this.interests.split(' ')
   @State ID: number | undefined = AppStorage.get('id');
   @State object: string = ''
   private selectedDate: Date = new Date();

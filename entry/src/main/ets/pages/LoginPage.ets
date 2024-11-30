@@ -1,7 +1,17 @@
 import router from '@ohos.router'
 import promptAction from '@ohos.promptAction'
 import  DbService, { USERINFO }  from './DbService';
+import socket from '@ohos.net.socket';
+import util from '@ohos.util';
+import { Address } from '../model/Send';
 
+
+
+let  serverAddress :Address = {
+  address:"192.168.1.109",
+  port:8888,
+  family:1
+}
 @Entry
 @Component
 struct LoginPage {
@@ -74,6 +84,7 @@ struct LoginPage {
           .margin({ top: 12 })
           .onClick(() => this.navigateToRegister())
 
+
     }
     .width('100%')
     .height('100%')
@@ -88,9 +99,61 @@ struct LoginPage {
       return;
     }
 
-    // 模拟本地验证逻辑
     try {
-      let db = new DbService();
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "登录,"+this.username+","+this.password+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray)
+                if(State.indexOf("yes,")!== -1){
+                  let result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  let resultArray = result.split(',');
+                  // 存储
+                  AppStorage.setOrCreate('id', resultArray[0]);
+                  AppStorage.setOrCreate('username', resultArray[1]);
+                  AppStorage.setOrCreate('password', resultArray[2]);
+                  AppStorage.setOrCreate('gender', resultArray[3]);
+                  AppStorage.setOrCreate('avatar_Url', resultArray[4]);
+                  AppStorage.setOrCreate('name', resultArray[5]);
+                  if(resultArray[6]=='null'){
+                    AppStorage.setOrCreate('birthday','');
+                  }else {
+                    AppStorage.setOrCreate('birthday', resultArray[6]);
+                  }
+                  AppStorage.setOrCreate('interests', resultArray[7]);
+
+                  promptAction.showToast({ message: '登录成功！', duration: 2000 });
+                  router.replaceUrl({
+                    url: 'pages/HomePage'
+                  });
+                }
+                if(State=='absent'){
+                  promptAction.showToast({ message: '用户不存在！', duration: 2000 });
+                }
+                if(State=='incorrect'){
+                  promptAction.showToast({ message: '密码错误，请重试。', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+
+      /*let db = new DbService();
 
       // 查询用户信息
       let users = await db.queryOneByUsername(this.username);
@@ -122,6 +185,7 @@ struct LoginPage {
         // 密码错误
         promptAction.showToast({ message: '密码错误，请重试。', duration: 2000 });
       }
+      */
     } catch (err) {
       console.error(`Login failed. Message: ${err.message}`);
       promptAction.showToast({ message: '登录失败，请稍后重试！', duration: 2000 });

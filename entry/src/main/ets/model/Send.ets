@@ -157,28 +157,26 @@ export struct Send {
   sendMsg2Server() {
 
     tcpSocket.send({ data: this.sendMsg + "\r\n" })
-      /*.then(async () => {
+      .then(async () => {
         this.msgHistory += "我:" + this.sendMsg + await getCurrentTimeString() + "\r\n"
         tcpSocket.on("message", async (value) => {
           //let msg = buf2String(value.message);  // 转换字节数据为字符串
+          let byteArray = new Uint8Array(value.message);
+          let textDecoder = util.TextDecoder.create("utf-8");
+          let State = textDecoder.decodeToString(byteArray)
           let time = await getCurrentTimeString();
-          this.msgHistory += "服务端: " + value.message + time + "\r\n";
+          let message = byteArray.join(',');  // 将字节数组转换为逗号分隔的字符串，方便查看
+          let result= State.slice(State.indexOf("yes,") + "yes,".length);
+          this.msgHistory += "服务端: " + result + time + "\r\n";
+
+          //this.msgHistory += "服务端: " + msg + time + "\r\n";
+          //this.msgHistory += "服务端: " + value.message + time + "\r\n";
           //this.scroller.scrollEdge(Edge.Bottom);  // 滚动到最底部
         });
       })
       .catch((e:Error) => {
         this.msgHistory += '发送失败' + e.message + "\r\n";
-      })*/
-  }
-
-  receive(){
-    // 只有在连接成功后，才注册消息接收的事件监听
-    tcpSocket.on("message", async (value) => {
-      //let msg = buf2String(value.message);  // 转换字节数据为字符串
-      let time = await getCurrentTimeString();
-      this.msgHistory += "服务端: " + value.message + time + "\r\n";
-      //this.scroller.scrollEdge(Edge.Bottom);  // 滚动到最底部
-    });
+      })
   }
 
 }

@@ -1,7 +1,17 @@
 import promptAction from '@ohos.promptAction';
 import DbService,{  USERINFO } from './DbService';
 import router from '@ohos.router';
+import socket from '@ohos.net.socket';
+import util from '@ohos.util';
+import { Address } from '../model/Send';
 
+
+
+let  serverAddress :Address = {
+  address:"192.168.1.109",
+  port:8888,
+  family:1
+}
 
 @Entry
 @Component
@@ -114,24 +124,60 @@ struct RegisterPage {
       promptAction.showToast({ message: '两次密码输入不一致！', duration: 2000 });
       return;
     }
-
+    if(this.param.gender=='man'){
+      this.param.avatar_Url='Page_image/man.png'
+    }else {
+      this.param.avatar_Url='Page_image/woman.png'
+    }
     try {
-      let db = new DbService()
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "注册,"+this.param.username+","+this.param.password+","+this.param.gender+","+this.param.avatar_Url
+            +","+this.param.name+","+this.param.birthday+","+this.param.interests+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray)
+                if(State=="yes"){
+                  promptAction.showToast({ message: '注册成功！', duration: 2000 });
+                  router.replaceUrl({
+                    url: 'pages/LoginPage'
+                  });
+                }
+                if(State=='reuse'){
+                  promptAction.showToast({ message: '用户名已存在！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+
+      /*let db = new DbService()
       const userExists = await db.queryOneByUsername(this.param.username);
       if (userExists.length > 0) {
         promptAction.showToast({ message: '用户名已存在！', duration: 2000 });
         return;
       }
-      if(this.param.gender=='man'){
-        this.param.avatar_Url='Page_image/man.png'
-      }else {
-        this.param.avatar_Url='Page_image/woman.png'
-      }
+
       await db.insertUser(this.param);
       promptAction.showToast({ message: '注册成功！', duration: 2000 });
       router.replaceUrl({
         url: 'pages/LoginPage'
-      });
+      });*/
+
     } catch (err) {
       console.error(`Registration failed. Message: ${err.message}`);
       promptAction.showToast({ message: '注册失败，请稍后重试！', duration: 2000 });

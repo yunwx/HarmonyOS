@@ -1,7 +1,9 @@
 import { Hobbies } from "../model/Hobbies";
 import { promptAction } from "@kit.ArkUI";
-import DbService, { USERINFO } from "./DbService";
-import { UpdateMe } from "../model/UpdateMe";
+import { USERINFO } from "./DbService";
+import { UpdateNet } from "../model/UpdateNet";
+
+
 
 @CustomDialog
 export struct DataDialog {
@@ -38,7 +40,7 @@ export struct DataDialog {
                 promptAction.showToast({ message: '请输入男或女', duration: 2000 })
                 return;
               }
-              let update = new UpdateMe()
+              let update = new UpdateNet()
               if(this.object=='性别'){
                 if(this.data=='男'){
                   update.updateGender('man')
@@ -78,7 +80,7 @@ export struct HobbiesDialog {
             selectedInterests:this.selectedInterests,
             onInterestsChange: (selectedInterests: Array<string>) => {
               this.selectedInterests = selectedInterests; // 更新父组件中的兴趣列表
-              this.Interests = this.selectedInterests.join(',')
+              this.Interests = this.selectedInterests.join(' ')
               console.log('Selected interests:', this.selectedInterests); // 打印选中的兴趣
             }
           })
@@ -95,7 +97,8 @@ export struct HobbiesDialog {
                 promptAction.showToast({ message: '至少选择一个兴趣！', duration: 2000 });
                 return;
               }
-              let update = new UpdateMe()
+
+              let update = new UpdateNet()
               update.updateInterests(this.Interests)
               if (this.onDataSelected) {
                 this.onDataSelected(this.selectedInterests); // 通过回调函数传递数据
@@ -195,7 +198,7 @@ export struct HomeDialog {
         Hobbies({
           onInterestsChange: (selectedInterests: Array<string>) => {
             this.selectedInterests = selectedInterests; // 更新父组件中的兴趣列表
-            this.Interests = this.selectedInterests.join(',')
+            this.Interests = this.selectedInterests.join(' ')
             console.log('Selected interests:', this.selectedInterests); // 打印选中的兴趣
           }
         });
@@ -210,20 +213,30 @@ export struct HomeDialog {
       Button('确定')
         .margin({ top: 30, bottom: 30 })
         .onClick(() => {
-          if(this.name.length==0){
-            promptAction.showToast({ message: '请输入昵称！', duration: 2000 });
-            return;
-          }else if (this.birthday.length == 0) {
-            promptAction.showToast({ message: '请选择生日！', duration: 2000 });
-            return;
-          } else if (this.Interests.length == 0) {
-            promptAction.showToast({ message: '至少选择一个兴趣！', duration: 2000 });
-            return;
-          }
-          let update = new UpdateMe()
-          update.updateOne(this.name,this.birthday,this.Interests)
-          this.controller!.close();
+          this.Update()
+          this.controller?.close()
         });
     }
   }
+  private async Update(){
+
+    if(this.name.length==0){
+      promptAction.showToast({ message: '请输入昵称！', duration: 2000 });
+      return;
+    }else if (this.birthday.length == 0) {
+      promptAction.showToast({ message: '请选择生日！', duration: 2000 });
+      return;
+    } else if (this.Interests.length == 0) {
+      promptAction.showToast({ message: '至少选择一个兴趣！', duration: 2000 });
+      return;
+    }
+    let update = new UpdateNet()
+    update.updateOne(this.name,this.birthday,this.Interests)
+
+      /*let update = new UpdateMe()
+      update.updateOne(this.name,this.birthday,this.Interests)
+      this.controller!.close();*/
+
+  }
 }
+
