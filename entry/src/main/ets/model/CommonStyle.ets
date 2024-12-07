@@ -993,3 +993,119 @@ export struct person{
     .height('100%')
   }
 }
+
+@Component
+export struct Activity {
+  private tabsController : TabsController = new TabsController()
+  @State currentIndex:number = 0
+
+  build() {
+    Column() {
+      Row(){
+        Row(){
+          Image('Page_image/record.png')
+            .width(25)
+            .height(25)
+            .onClick(()=>{
+
+            })
+        }.width('10%')
+        .margin({left:5})
+        Row(){
+          Flex({ alignItems: ItemAlign.Center, justifyContent: FlexAlign.Center }) {
+            Text('活动').fontSize('18fp').padding('20px')
+          }
+        }.width('80%')
+        Row(){
+          Image('Page_image/add.png')
+            .width(25)
+            .height(25)
+            .onClick(()=>{
+
+            })
+        }.width('10%')
+
+      }.width('100%').height('180px').backgroundColor('#fff5f1f1')
+
+      Swiper() {
+        Image("Page_image/swiper1.jpg")
+          .width('100%')
+          .height('100%')
+        Image("Page_image/swiper2.jpg")
+          .width('100%')
+          .height('100%')
+        Image("Page_image/swiper3.jpg")
+          .width('100%')
+          .height('100%')
+        Image("Page_image/swiper4.jpg")
+          .width('100%')
+          .height('100%')
+      }
+      .width('100%')
+      .height('30%')
+      .loop(true)
+      .autoPlay(true) //自动轮播
+      .interval(3000) //轮播间隔
+
+      Tabs({controller: this.tabsController}) {
+        TabContent() {
+
+        }
+        .tabBar(this.TabBuilder("推荐",0))
+
+        TabContent() {
+          Text('热门的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("热门",1))
+
+        TabContent() {
+          Text('运动的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("运动",2))
+
+        TabContent() {
+          Text('艺术的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("艺术",3))
+
+        TabContent() {
+          Text('娱乐的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("娱乐",4))
+
+        TabContent() {
+          Text('科技的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("科技",5))
+
+        TabContent() {
+          Text('公益的内容').fontSize(30)
+        }
+        .tabBar(this.TabBuilder("公益",6))
+
+
+      }
+      .onChange((index) => {
+        this.currentIndex = index;
+      })
+      .scrollable(false)
+      .width('100%')
+      .height('60%')
+    }.width('100%')
+    .height('100%')
+  }
+
+  @Builder TabBuilder(title: string, targetIndex: number) {
+    Column() {
+      Text(title)
+        .fontColor(this.currentIndex === targetIndex ? '#1698CE' : '#6B6B6B')
+    }
+    .width('100%')
+    .height(50)
+    .justifyContent(FlexAlign.Center)
+    .onClick(() => {
+      this.currentIndex = targetIndex;
+      this.tabsController.changeIndex(this.currentIndex);
+    })
+  }
+}

@@ -1,4 +1,4 @@
-import { ChatItem, ContactPage, Friend, ME, Title} from '../model/CommonStyle'
+import { Activity, ChatItem, ContactPage, Friend, ME, Title} from '../model/CommonStyle'
 import {  Send } from '../model/Send';
 import { DataDialog, HomeDialog } from '../model/Dialog';
 import chat from  '../model/Network'
@@ -164,7 +164,7 @@ onPageShow(): void {
           .tabBar(this.TabBuilder('通讯录', 1, "Page_image/address_book1.png", "Page_image/address_book2.png"))
 
           TabContent() {
-            Text('活动内容').fontSize(30)
+            Activity()
           }
           .tabBar(this.TabBuilder('活动', 2, "Page_image/planet1.png", "Page_image/planet2.png"))
 
