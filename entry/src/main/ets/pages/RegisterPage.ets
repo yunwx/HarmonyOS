@@ -1,22 +1,19 @@
 import promptAction from '@ohos.promptAction';
-import DbService,{  USERINFO } from './DbService';
+import DbService,{  USERINFO } from '../SQLite/DbService';
 import router from '@ohos.router';
 import socket from '@ohos.net.socket';
 import util from '@ohos.util';
 import { Address } from '../model/Send';
+import { LoginAndRegister } from '../model/Network';
 
 
-
-let  serverAddress :Address = {
-  address:"192.168.1.109",
-  port:8888,
-  family:1
-}
 
 @Entry
 @Component
 struct RegisterPage {
   @State confirmPassword: string = '';
+  @State warn1: string = '';
+  @State warn2: string = '';
   @State param :USERINFO = {
     id: null,
     username: '',
@@ -29,11 +26,11 @@ struct RegisterPage {
   }
   build() {
     Column() {
-      Image($r('app.media.back'))
-        .width(40)
-        .height(40)
+      Image("Page_image/back.png")
+        .width(30)
+        .height(30)
         .position({ x: '0%' })
-        .margin({top:10})
+        .margin({top:5})
         .onClick(()=>{
           router.replaceUrl({
             url: 'pages/LoginPage'
@@ -43,7 +40,7 @@ struct RegisterPage {
       Text("注册")
         .fontSize(50)
         .fontWeight('bold')
-        .margin({ top: 170, bottom: 50 });
+        .margin({ top: 150, bottom: 50 });
 
       Text("海内存知己，天涯若比邻")
         .fontSize(20)
@@ -52,35 +49,67 @@ struct RegisterPage {
 
       TextInput({ placeholder: '请输入用户名' })
         .maxLength(20)
-        .onChange((value) => { this.param.username = value; })
+        .onChange((value) => {
+          const usernameRegex = /^[A-Za-z0-9]{8,16}$/; // 只允许字母和数字的正则表达式
+          if (!usernameRegex.test(value)) {
+            this.warn1 = '用户名只能包含字母和数字，且长度为8-16位！'
+            return;
+          }
+          this.warn1 = ''
+          this.param.username = value;
+        })
         .width('90%')
         .height(50)
         .padding(10)
         .backgroundColor(Color.White)
         .opacity(0.5)
         .fontColor(Color.Black)
-        .margin({ top: 40, bottom: 15 });
+        .margin({ top: 40});
+
+      Text(this.warn1)
+        .fontColor(Color.White)
+        .fontSize(14)
 
       TextInput({ placeholder: '请输入密码' })
         .maxLength(20)
-        .onChange((value) => { this.param.password = value; })
+        .onChange((value) => {
+          const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+={}\[\]\\|;:'",<>\./?`~\-]{8,20}$/;// 密码规则正则表达式：允许字母、数字和特殊字符，长度为 8 到 20
+          if (!passwordRegex.test(value)) {
+            this.warn2 = '密码只能包含字母、数字和特殊字符，且长度为8-20位！'
+            return;
+          }
+          this.warn2 = ''
+          this.param.password = value;
+        })
         .width('90%')
         .height(50)
         .padding(10)
         .backgroundColor(Color.White)
         .opacity(0.5)
-        .margin({ bottom: 15 })
+        .margin({ top: 15 })
         .fontColor(Color.Black);
+
+      Text(this.warn2)
+        .fontColor(Color.White)
+        .fontSize(14)
 
       TextInput({ placeholder: '请确认密码'})
         .maxLength(20)
-        .onChange((value) => { this.confirmPassword = value; })
+        .onChange((value) => {
+          const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+={}\[\]\\|;:'",<>\./?`~\-]{8,20}$/;
+          if (!passwordRegex.test(value)) {
+            return;
+          }
+          this.confirmPassword = value;
+        })
         .width('90%')
         .height(50)
         .padding(10)
         .backgroundColor(Color.White)
         .opacity(0.5)
+        .margin({ top: 15 })
         .fontColor(Color.Black);
+
       Row(){
         Text('性别:')
           .fontSize(20)
@@ -129,58 +158,7 @@ struct RegisterPage {
     }else {
       this.param.avatar_Url='Page_image/woman.png'
     }
-    try {
-      let tcpSocket = socket.constructTCPSocketInstance();
-      tcpSocket.connect({ address: serverAddress })
-        .then(() => {
-          console.log("连接成功");
-          tcpSocket.send({ data: "注册,"+this.param.username+","+this.param.password+","+this.param.gender+","+this.param.avatar_Url
-            +","+this.param.name+","+this.param.birthday+","+this.param.interests+ "\r\n"})
-            .then(async () => {
-              console.log("发送成功");
-              tcpSocket.on("message", async (value) => {
-                tcpSocket.close()
-                let byteArray = new Uint8Array(value.message);
-                let textDecoder = util.TextDecoder.create("utf-8");
-                let State = textDecoder.decodeToString(byteArray)
-                if(State=="yes"){
-                  promptAction.showToast({ message: '注册成功！', duration: 2000 });
-                  router.replaceUrl({
-                    url: 'pages/LoginPage'
-                  });
-                }
-                if(State=='reuse'){
-                  promptAction.showToast({ message: '用户名已存在！', duration: 2000 });
-                }
-              });
-            })
-            .catch((e:Error) => {
-              console.log("发送失败");
-            })
-          tcpSocket.on("close", () => {
-            console.log("Socket 已关闭");
-          });
-        })
-        .catch((e: Error) => {
-          console.log("连接失败");
-        });
-
-      /*let db = new DbService()
-      const userExists = await db.queryOneByUsername(this.param.username);
-      if (userExists.length > 0) {
-        promptAction.showToast({ message: '用户名已存在！', duration: 2000 });
-        return;
-      }
-
-      await db.insertUser(this.param);
-      promptAction.showToast({ message: '注册成功！', duration: 2000 });
-      router.replaceUrl({
-        url: 'pages/LoginPage'
-      });*/
-
-    } catch (err) {
-      console.error(`Registration failed. Message: ${err.message}`);
-      promptAction.showToast({ message: '注册失败，请稍后重试！', duration: 2000 });
-    }
+    let login = new LoginAndRegister()
+    login.Register(this.param.username,this.param.password,this.param.gender,this.param.avatar_Url,this.param.name,this.param.birthday,this.param.interests)
   }
 }

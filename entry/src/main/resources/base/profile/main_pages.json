@@ -2,6 +2,11 @@
   "src": [
     "pages/LoginPage",
     "pages/HomePage",
-    "pages/RegisterPage"
+    "pages/RegisterPage",
+    "pages/ChatPage",
+    "pages/SearchPage",
+    "pages/NewFriendsPage",
+    "pages/PersonPage",
+    "pages/NewPersonPage"
   ]
 }

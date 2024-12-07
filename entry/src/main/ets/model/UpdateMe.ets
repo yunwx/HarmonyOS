@@ -1,4 +1,4 @@
-import DbService, { USERINFO } from "../pages/DbService";
+import DbService, { USERINFO } from "../SQLite/DbService";
 
 export class UpdateMe {
   private  param :USERINFO = {

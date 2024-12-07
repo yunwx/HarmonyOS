@@ -1,7 +1,7 @@
-import { Hobbies } from "../model/Hobbies";
+import { Hobbies } from "./Hobbies";
 import { promptAction } from "@kit.ArkUI";
-import { USERINFO } from "./DbService";
-import { UpdateNet } from "../model/UpdateNet";
+import { USERINFO } from "../SQLite/DbService";
+import { UpdateNet } from "./Network";
 
 
 
