@@ -541,11 +541,12 @@ export interface Friend {
 }
 
 @Component
-export struct ContactPage {
+export struct Contact {
   @StorageLink('friends') friends: string = ''
   @State friend:Friend[] = []
   @State friendName: string = ''
   @State search: string = ''
+  @StorageLink('username') username:string = ''
 
   aboutToAppear(): void {
     this.updateFriendsList();
@@ -615,10 +616,14 @@ export struct ContactPage {
             }
           }.height('100px').width('100%')
           .onClick(()=>{
+            let friend = new FriendOption();
+            friend.queryNewFriends(this.username)
             AppStorage.setOrCreate('index',1)
-            router.replaceUrl({
-              url: 'pages/NewFriendsPage'
-            });
+            setTimeout(() => {
+              router.replaceUrl({
+                url: 'pages/NewFriendsPage'
+              });
+            }, 70);
           })
 
 

@@ -631,6 +631,42 @@ export class FriendOption {
     }
   }
 
+  queryNewFriends(username:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查看好友请求,"+username+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('NewFriends', result);
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查看好友请求，请稍后重试！', duration: 2000 });
+    }
+  }
+
   ConfirmFriend(FriendName:string){
     let Id:number|undefined = AppStorage.get('id')
     let IdStr: string = ''
