@@ -149,6 +149,14 @@ struct RegisterPage {
   }
 
   private async handleRegister() {
+    if(this.param.username==''){
+      promptAction.showToast({ message: '请输入正确的用户名格式', duration: 2000 });
+      return;
+    }
+    if(this.param.password==''){
+      promptAction.showToast({ message: '请输入正确的密码格式', duration: 2000 });
+      return;
+    }
     if (this.param.password !== this.confirmPassword) {
       promptAction.showToast({ message: '两次密码输入不一致！', duration: 2000 });
       return;

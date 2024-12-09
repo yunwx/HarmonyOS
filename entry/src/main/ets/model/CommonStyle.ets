@@ -1,7 +1,7 @@
 import { DataDialog, HobbiesDialog } from "./Dialog"
 import { UpdateMe } from "./UpdateMe"
 import { promptAction, router } from "@kit.ArkUI"
-import { FriendOption, NetSearch, UpdateNet } from "./Network"
+import chat, { FriendOption, NetSearch, UpdateNet } from "./Network"
 
 @Component
 export struct Title {
@@ -634,15 +634,15 @@ export struct Contact {
                 ListItem() {
                   ContactItem({ image: item.avatar_Url, text: item.name })
                 }
-                .onClick(() => {
+                .onClick(async () => {
                   let search = new NetSearch();
-                  search.SearchOne(item.Username)
+                  await search.SearchOne(item.Username)
                   setTimeout(() => {
                     router.pushUrl({
                       url: 'pages/PersonPage',
                       params: { username: item.Username }
                     });
-                  }, 70);
+                  }, 80);
                 })
               }, (item: Friend) => item.id)
             }
@@ -828,12 +828,14 @@ export struct person{
   @State ID: string = ''
   @State str: string = ''
   @StorageLink('friends') friends: string = ''
+  @StorageLink('id') Id:string = ''
   @State person :string |undefined= AppStorage.get("person")
 
+
   aboutToAppear(): void {
-    console.log("person数据："+this.person);
-    if(this.person!==undefined){
-      let personArray:Array<string> = this.person.split(',')
+    console.log("person数据：" + this.person);
+    if (this.person !== undefined) {
+      let personArray: Array<string> = this.person.split(',')
       this.ID = personArray[0];
       this.gender = personArray[2];
       this.head = personArray[3];
@@ -845,6 +847,23 @@ export struct person{
     let arr = this.friends.split(',');
     arr.splice(-3);
     this.str = arr.join(',');
+    chat.onMessageReceived = (receivedMessage: string) => {
+      console.log("收到的消息:", receivedMessage);
+      // 获取当前时间戳
+      const timestamp1 = Date.now(); // 当前时间的毫秒数 (Unix 时间戳)
+      // 获取当前时间的可读格式 (可选)
+      const readableTime = new Date(timestamp1).toLocaleString(); // 格式化为本地时间
+      const messageArray: Array<string> = receivedMessage.split('|#|')
+      const str = messageArray[0] + '->' + this.Id;
+      let friend: string = AppStorage.get(str) || '';
+      if (friend !== '') {
+        let newMessage: string = friend + '^||^' + messageArray[1] + '#|#' + timestamp1 + '#|#' + readableTime;
+        AppStorage.set(str, newMessage);
+      } else {
+        let newMessage: string = messageArray[1] + '#|#' + timestamp1 + '#|#' + readableTime;
+        AppStorage.setOrCreate(str, newMessage)
+      }
+    }
   }
 
   build() {

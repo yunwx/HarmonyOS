@@ -690,7 +690,11 @@ export class FriendOption {
                 if(State.indexOf("yes,")!== -1){
                   const result= State.slice(State.indexOf("yes,") + "yes,".length);
                   const resultArray = result.split(',');
-                  friend = friend ? friend + "," + resultArray.join(',') : resultArray.join(',');
+                  if(friend==''||friend==undefined){
+                    friend=resultArray.join(',');
+                  }else {
+                    friend=friend + "," + resultArray.join(',')
+                  }
                   AppStorage.set('friends',friend)
                   promptAction.showToast({ message: '你有新好友啦！', duration: 2000 });
                 }
