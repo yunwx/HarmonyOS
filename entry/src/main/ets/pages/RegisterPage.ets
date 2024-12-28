@@ -73,9 +73,9 @@ struct RegisterPage {
       TextInput({ placeholder: '请输入密码' })
         .maxLength(20)
         .onChange((value) => {
-          const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+={}\[\]\\|;:'",<>\./?`~\-]{8,20}$/;// 密码规则正则表达式：允许字母、数字和特殊字符，长度为 8 到 20
+          const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+={}\[\]\\|;:'",<>\./?`~\-]{8,15}$/;// 密码规则正则表达式：允许字母、数字和特殊字符，长度为 8 到 15
           if (!passwordRegex.test(value)) {
-            this.warn2 = '密码只能包含字母、数字和特殊字符，且长度为8-20位！'
+            this.warn2 = '密码只能包含字母、数字和特殊字符，且长度为8-15位！'
             return;
           }
           this.warn2 = ''

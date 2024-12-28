@@ -4,9 +4,25 @@
     "pages/HomePage",
     "pages/RegisterPage",
     "pages/ChatPage",
-    "pages/SearchPage",
+    "pages/SearchFriendsPage",
     "pages/NewFriendsPage",
     "pages/PersonPage",
-    "pages/NewPersonPage"
+    "pages/NewPersonPage",
+    "pages/SearchPage",
+    "pages/AddActivityPage",
+    "pages/ActivityPage",
+    "pages/MyActivityPage",
+    "pages/MyActivityPage1",
+    "pages/MyActivityPage2",
+    "pages/CommentsPage",
+    "pages/ParticipantsPage",
+    "pages/SettingPage",
+    "pages/AdminPage",
+    "pages/AdminActivityPage",
+    "pages/AdminPersonPage",
+    "pages/PersonPage1",
+    "pages/PersonPage2",
+    "pages/AdminAddActivityPage",
+    "pages/AdminUpdateActivityPage"
   ]
 }

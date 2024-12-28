@@ -1,5 +1,6 @@
 import { router } from "@kit.ArkUI"
 import { CommonTitle } from "../model/CommonStyle"
+import encryptor from "../model/Encryptor";
 import chat from  '../model/Network'
 
 interface Message {
@@ -50,6 +51,7 @@ export struct ChatPage {
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 50);
+
     chat.onMessageReceived = (receivedMessage: string) => {
       console.log("收到的消息:", receivedMessage);
       // 获取当前时间戳
@@ -58,17 +60,19 @@ export struct ChatPage {
       const readableTime = new Date(timestamp1).toLocaleString();  // 格式化为本地时间
       // 将接收到的消息添加到 messages 数组
       const messageArray:Array<string> = receivedMessage.split('|#|')
+      const decryptedMessage = encryptor.decrypt(messageArray[1]);
+      console.log("解密后的消息:", decryptedMessage);
       if(messageArray[0]===this.friendId){
-        this.messages.push({ sender: "friend", content: messageArray[1] ,timestamp:timestamp1,time:readableTime});
+        this.messages.push({ sender: "friend", content: decryptedMessage ,timestamp:timestamp1,time:readableTime});
       }
       this.scroller.scrollEdge(Edge.Bottom);
       const str2 = messageArray[0] + '->' + this.myId;
       let friend: string = AppStorage.get(str2) || '';
       if(friend!==''){
-        let newMessage:string = friend+'^||^'+messageArray[1]+'#|#'+timestamp1+'#|#'+readableTime;
+        let newMessage:string = friend+'^||^'+decryptedMessage+'#|#'+timestamp1+'#|#'+readableTime;
         AppStorage.set(str2,newMessage);
       }else {
-        let newMessage:string = messageArray[1]+'#|#'+timestamp1+'#|#'+readableTime;
+        let newMessage:string = decryptedMessage+'#|#'+timestamp1+'#|#'+readableTime;
         AppStorage.setOrCreate(str2,newMessage)
       }
     }

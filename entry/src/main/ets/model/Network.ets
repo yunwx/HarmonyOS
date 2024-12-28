@@ -4,11 +4,12 @@ import { Address } from '../model/Send';
 import { promptAction, router } from '@kit.ArkUI';
 import { Friend } from './CommonStyle';
 import Network from '@system.network';
+import encryptor from './Encryptor';
 
 
 let  serverAddress :Address = {
-  address:"47.98.237.152",
-  port:8080,
+  address:"192.168.1.109",
+  port:8888,
   family:1
 }
 
@@ -310,6 +311,8 @@ export class LoginAndRegister {
                   console.log("用户好友:", parts[1]);
                   console.log("好友申请:", parts[2]);
                   console.log("聊天记录:", parts[3]);
+                  console.log("推荐好友:", parts[4]);
+                  console.log("推荐活动:", parts[5]);
                   const parts0Array = parts[0].split(',');
                   // 存储
                   AppStorage.setOrCreate('id', parts0Array[0]);
@@ -326,6 +329,7 @@ export class LoginAndRegister {
                   AppStorage.setOrCreate('interests', parts0Array[7]);
                   AppStorage.setOrCreate('friends', parts[1]);
                   AppStorage.setOrCreate('NewFriends', parts[2]);
+                  AppStorage.setOrCreate('init','no');
                   const parts3Array = parts[3].split('|X|');
                   for (let index = 0; index < parts3Array.length; index++) {
                     let  array = parts3Array[index].split('^^');
@@ -342,6 +346,8 @@ export class LoginAndRegister {
                       AppStorage.setOrCreate(str,array[2]+"#|#"+timestamp+'#|#'+readableTime)
                     }
                   }
+                  AppStorage.setOrCreate('recommendFriends', parts[4]);
+                  AppStorage.setOrCreate('推荐', parts[5]);
                   promptAction.showToast({ message: '登录成功！', duration: 2000 });
                   router.replaceUrl({
                     url: 'pages/HomePage'
@@ -352,6 +358,9 @@ export class LoginAndRegister {
                 }
                 if(State==='incorrect'){
                   promptAction.showToast({ message: '密码错误，请重试。', duration: 2000 });
+                }
+                if(State==='block'){
+                  promptAction.showToast({ message: '账号已被封禁！', duration: 2000 });
                 }
               });
             })
@@ -469,6 +478,7 @@ export class NetChat {
   // 这个回调函数用于接收消息
   onMessageReceived?: (receivedMessage: string) => void;
 
+
   // 初始化时连接到服务器（只会连接一次）
   private connectToServer(): Promise<void> {
     if (this.tcpSocket !== null) {
@@ -498,7 +508,9 @@ export class NetChat {
       .then(() => {
         // 发送消息
         if (this.tcpSocket) {
-          this.tcpSocket.send({ data: `聊天,${username},@${friendName} ${message}\r\n` })
+          // 加密消息
+          const encryptedMessage = encryptor.encrypt(message);
+          this.tcpSocket.send({ data: `聊天,${username},@${friendName} ${encryptedMessage}\r\n` })
             .then(() => {
               console.log("发送成功");
             })
@@ -522,12 +534,26 @@ export class NetChat {
       });
   }
 
+  disconnect(): void {
+    if (this.tcpSocket !== null) {
+      console.log("正在断开连接...");
+      this.tcpSocket.close()
+        .then(() => {
+          console.log("连接已关闭");
+        })
+        .catch((e: Error) => {
+          console.log("关闭连接失败", e);
+        });
+    } else {
+      console.log("没有连接可关闭");
+    }
+  }
+
 }
-let chat = new NetChat()
+const  chat = new NetChat()
 export default chat as NetChat
 
 export class FriendOption {
-
   async SearchFriend(username: string): Promise<Friend | null> {
     let friend: Friend = {
       id:'',
@@ -611,7 +637,7 @@ export class FriendOption {
                   promptAction.showToast({ message: '添加消息已发出！', duration: 2000 });
                 }
                 if(State == 'not'){
-                  promptAction.showToast({ message: '添加失败！', duration: 2000 });
+                  promptAction.showToast({ message: '你已添加过该好友！', duration: 2000 });
                 }
               });
             })
@@ -663,7 +689,44 @@ export class FriendOption {
         });
     } catch (err) {
       console.error(`Registration failed. Message: ${err.message}`);
-      promptAction.showToast({ message: '查看好友请求，请稍后重试！', duration: 2000 });
+      promptAction.showToast({ message: '查看好友请求失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  queryFriends(){
+    let username:string|undefined = AppStorage.get('username')
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查看好友列表,"+username+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.set('friends', result);
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查看好友列表失败，请稍后重试！', duration: 2000 });
     }
   }
 
@@ -756,10 +819,49 @@ export class FriendOption {
     }
   }
 
+  async searchRecommends(userId:string,userInterests:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询推荐好友," + userId + "," + userInterests + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('recommendFriends', result);
+                  console.log("存储的数据是:"+AppStorage.get('recommendFriends'))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
 }
 
 export class NetSearch {
-  SearchOne(FriendName:string):string{
+
+  async SearchOne(FriendName:string): Promise<string>{
     try {
       let tcpSocket = socket.constructTCPSocketInstance();
       tcpSocket.connect({ address: serverAddress })
@@ -776,8 +878,9 @@ export class NetSearch {
                 console.log("解码后的 State:", State);
                 if(State.indexOf("yes,")!== -1){
                   const result= State.slice(State.indexOf("yes,") + "yes,".length);
-                  AppStorage.setOrCreate("person",result)
-                  console.log("存储的数据是："+AppStorage.get("person"));
+                  let resultArray: Array<string> = result.split(',')
+                  AppStorage.setOrCreate(resultArray[1],result)
+                  console.log("存储的数据是："+AppStorage.get(resultArray[1]));
                 }
               });
             })
@@ -797,4 +900,983 @@ export class NetSearch {
     }
     return 'yes';
   }
+
+  SearchUserAll(){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询全部用户,"+"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('管理用户',result)
+                  console.log("存储的数据是："+AppStorage.get('管理用户'));
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  SearchUserOne(user:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询单个用户,"+user+"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('管理用户',result)
+                  console.log("存储的数据是："+AppStorage.get('管理用户'));
+                }
+                if(State == 'no'){
+                  promptAction.showToast({ message: '未搜索到！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  SearchActivityAll(){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询全部活动,"+"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('管理活动',result)
+                  console.log("存储的数据是："+AppStorage.get('管理活动'));
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  SearchActivityOne(activityId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询单个活动,"+activityId+"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('管理活动',result)
+                  console.log("存储的数据是："+AppStorage.get('管理活动'));
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  SearchDecideActivity(){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询待审核活动,"+"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('待审核活动',result)
+                  console.log("存储的数据是："+AppStorage.get('待审核活动'));
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  deleteUser(Username:string){
+    let Id:number|undefined = AppStorage.get('id')
+    let IdStr: string = ''
+    if(Id!=undefined){
+      IdStr = Id.toString();
+    }
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "删除用户,"+IdStr+","+Username+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State == 'yes'){
+                  promptAction.showToast({ message: '删除成功！', duration: 2000 });
+                }
+                if(State == 'no'){
+                  promptAction.showToast({ message: '删除失败！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '删除用户失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  updateUserStatus(userId:string,newStatus:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "修改用户状态," + userId + ","+ newStatus + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '操作成功！', duration: 2000 });
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '操作失败！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '修改失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+}
+
+export class ActivityOption {
+
+  addActivity(activityName:string,category:string,labels:string,description:string,startTime:string,endTime:string,maxParticipants:string,creatorId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "新建活动,"+activityName+","+category+","+labels+","+description
+            +","+startTime+","+endTime+","+maxParticipants+","+creatorId+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State=="yes"){
+                  promptAction.showToast({ message: '创建成功！', duration: 2000 });
+                  router.replaceUrl({
+                    url: 'pages/HomePage'
+                  });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '创建失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  AdminAddActivity(activityName:string,category:string,labels:string,description:string,startTime:string,endTime:string,maxParticipants:string,creatorId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "管理员新建活动,"+activityName+","+category+","+labels+","+description
+            +","+startTime+","+endTime+","+maxParticipants+","+creatorId+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State=="yes"){
+                  promptAction.showToast({ message: '创建成功！', duration: 2000 });
+                  router.replaceUrl({
+                    url: 'pages/AdminPage'
+                  });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '创建失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  updateActivity(activityId:string,activityName:string,category:string,labels:string,description:string,startTime:string,endTime:string,maxParticipants:string,creatorId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "活动修改,"+activityId+","+activityName+","+category+","+labels+","+description
+            +","+startTime+","+endTime+","+maxParticipants+","+creatorId+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State=="yes"){
+                  promptAction.showToast({ message: '修改成功！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '修改失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  AdminUpdateActivity(activityId:string,activityName:string,category:string,labels:string,description:string,startTime:string,endTime:string,maxParticipants:string,creatorId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "管理员活动修改,"+activityId+","+activityName+","+category+","+labels+","+description
+            +","+startTime+","+endTime+","+maxParticipants+","+creatorId+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                if(State=="yes"){
+                  promptAction.showToast({ message: '修改成功！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '修改失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  updateActivityStatus(activityId:string,newStatus:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "修改活动状态," + activityId + ","+ newStatus + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '操作成功！', duration: 2000 });
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '操作失败！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '修改失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  deleteActivity(activityId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "删除活动," + activityId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '删除成功！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '删除失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  searchByCategory(category:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "类别查询," + category + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate(category,result)
+                  let resultArray: Array<string> = result.split('||')
+                  for (let index = 0; index < resultArray.length; index++) {
+                    let array = resultArray[index].split(',')
+                    AppStorage.setOrCreate(array[0],resultArray[index])
+                    console.log("存储的数据是:"+AppStorage.get(array[0]))
+                  }
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  searchCreated(userId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "创建活动查询," + userId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate("Created",result)
+                    console.log("存储的数据是:"+AppStorage.get("Created"))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  searchJoin(userId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "参与活动查询," + userId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate("Join",result)
+                  console.log("存储的数据是:"+AppStorage.get("Join"))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  searchComments(activityId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "活动评论查询," + activityId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  let str = "Activity_"+activityId;
+                  AppStorage.setOrCreate(str,result)
+                  console.log("存储的数据是:"+AppStorage.get(str))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  async searchParticipants(activityId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询所有参与用户," + activityId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  let str = "Activity_Participants"+activityId;
+                  AppStorage.setOrCreate(str,result)
+                  console.log("存储的数据是:"+AppStorage.get(str))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  async searchRecommends(userId:string,userInterests:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "查询推荐活动," + userId + "," + userInterests + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State.indexOf("yes,")!== -1){
+                  const result= State.slice(State.indexOf("yes,") + "yes,".length);
+                  AppStorage.setOrCreate('推荐', result);
+                  console.log("存储的数据是:"+AppStorage.get('推荐'))
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '查询失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  AddComment(activityId:string,userId:string,commentText:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "评论," + activityId +","+userId+","+commentText+ "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '评论成功！', duration: 2000 });
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '评论失败！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '评论失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  deleteComment(commentId:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "删除评论," + commentId + "\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message",(value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '删除成功！', duration: 2000 });
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '删除失败！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '删除失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  Join(activityId:string,Id:string):boolean{
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "参与活动," + activityId +","+ Id +"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '参加成功！', duration: 2000 });
+                  return true;
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '你已经参加了！', duration: 2000 });
+                  return false;
+                }
+                if(State=="not"){
+                  promptAction.showToast({ message: '参与人数已满！', duration: 2000 });
+                  return false;
+                }
+                return false;
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '参加失败，请稍后重试！', duration: 2000 });
+    }
+    return false;
+  }
+
+  unJoin(activityId:string,Id:string):boolean{
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "取消参加," + activityId +","+ Id +"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '取消成功！', duration: 2000 });
+                  return true;
+                }
+                return false;
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '取消失败，请稍后重试！', duration: 2000 });
+    }
+    return false;
+  }
+
+  like(activityId:string,Id:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "点赞," + activityId +","+ Id +"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '点赞成功！', duration: 2000 });
+                }
+                if(State=="no"){
+                  promptAction.showToast({ message: '不能重复点赞！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '点赞失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
+  unlike(activityId:string,Id:string){
+    try {
+      let tcpSocket = socket.constructTCPSocketInstance();
+      tcpSocket.connect({ address: serverAddress })
+        .then(() => {
+          console.log("连接成功");
+          tcpSocket.send({ data: "取消点赞," + activityId +","+ Id +"\r\n"})
+            .then(async () => {
+              console.log("发送成功");
+              tcpSocket.on("message", async (value) => {
+                tcpSocket.close()
+                let byteArray = new Uint8Array(value.message);
+                let textDecoder = util.TextDecoder.create("utf-8");
+                let State = textDecoder.decodeToString(byteArray).trim()
+                console.log("解码后的 State:", State);
+                if(State=="yes"){
+                  promptAction.showToast({ message: '取消点赞成功！', duration: 2000 });
+                }
+              });
+            })
+            .catch((e:Error) => {
+              console.log("发送失败");
+            })
+          tcpSocket.on("close", () => {
+            console.log("Socket 已关闭");
+          });
+        })
+        .catch((e: Error) => {
+          console.log("连接失败");
+        });
+    } catch (err) {
+      console.error(`Registration failed. Message: ${err.message}`);
+      promptAction.showToast({ message: '取消点赞失败，请稍后重试！', duration: 2000 });
+    }
+  }
+
 }

@@ -174,6 +174,7 @@ export struct HomeDialog {
                 const localDate = new Date(value);
                 localDate.setHours(0, 0, 0, 0);  // 设置为当天的零点时刻
                 this.selectedDate = localDate
+                this.birthday = `${localDate.getFullYear()}-${(localDate.getMonth() + 1).toString().padStart(2, '0')}-${localDate.getDate().toString().padStart(2, '0')}`;
                 console.info("DatePickerDialog:onDateAccept()" + value.toString())
               },
               onCancel: () => {
@@ -240,3 +241,74 @@ export struct HomeDialog {
   }
 }
 
+@CustomDialog
+export struct PasswordDialog {
+  @StorageLink('password') password: string = ''
+  @State OldPassword: string ='';
+  @State NewPassword: string ='';
+  @State ConfirmPassword: string = '';
+
+  controller?: CustomDialogController;
+
+  build() {
+    Column() {
+      Column() {
+        Text('修改密码')
+          .fontSize(16)
+          .margin({ top:10,bottom: 10 });
+        TextInput({ placeholder: "请输入旧密码" })
+          .onChange((value: string) => {
+            this.OldPassword = value;
+          })
+          .width('90%')
+          .backgroundColor("#F5F5F5")
+          .padding(10)
+          .borderRadius(20)
+          .margin({ top:10,bottom: 10 });
+
+        TextInput({ placeholder: "请输入新密码" })
+          .onChange((value: string) => {
+            this.NewPassword = value;
+          })
+          .width('90%')
+          .backgroundColor("#F5F5F5")
+          .padding(10)
+          .borderRadius(20)
+          .margin({ top:10,bottom: 10 });
+
+        TextInput({ placeholder: "请确认新密码" })
+          .onChange((value: string) => {
+            this.ConfirmPassword = value;
+          })
+          .width('90%')
+          .backgroundColor("#F5F5F5")
+          .padding(10)
+          .borderRadius(20)
+          .margin({ top:10,bottom: 10 });
+
+        Row({ space: 30 }) {
+          Button("取消")
+            .onClick(() => {
+              this.controller?.close();
+            })
+            .backgroundColor('#ffc6c6c6')
+          Button("确认")
+            .onClick(() => {
+              if(this.OldPassword!==this.password){
+                promptAction.showToast({ message: '旧密码输入错误', duration: 2000 })
+                return;
+              }
+              if(this.NewPassword!==this.ConfirmPassword){
+                promptAction.showToast({ message: '两次密码输入不一致！', duration: 2000 })
+                return;
+              }
+              let update = new UpdateNet()
+              update.updatePassword(this.NewPassword)
+              this.controller?.close()
+            });
+        }
+        .margin({ bottom: 10 });
+      }
+    }
+  }
+}

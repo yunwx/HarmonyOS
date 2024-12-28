@@ -2,6 +2,7 @@ import { Activity, ChatItem, Contact,  Friend, ME, Title} from '../model/CommonS
 import {  Send } from '../model/Send';
 import { DataDialog, HomeDialog } from '../model/Dialog';
 import chat from  '../model/Network'
+import encryptor from '../model/Encryptor';
 
 interface Chat {
   id:string
@@ -22,11 +23,13 @@ struct HomePage{
   @StorageLink('index') index:number = 0
   @StorageLink('friends') friends: string = ''
   @StorageLink('username') username:string = ''
+  @StorageLink('init') init:string = ''
   @State Chat:Chat[] = []
   @State currentIndex:number = this.index;
   @State name: string | undefined = AppStorage.get('name');
   @State friend:string = ''
   @State message:string = ''
+  @State isRefreshing: boolean = false
 
 
   dialogController: CustomDialogController  = new CustomDialogController({
@@ -38,33 +41,35 @@ struct HomePage{
   })
 
 aboutToAppear(): void {
-    this.updateFriendsList()
-  if(AppStorage.get('init')===undefined){
+    this.updateChatList()
+  if(this.init=='no'){
     chat.Chat(this.username, this.friend,this.message)
-    AppStorage.setOrCreate('init',1)
+    AppStorage.setOrCreate('init','yes')
   }
 
     if(this.name!=undefined && this.name.length==0){
       this.dialogController.open()
     }
-
   chat.onMessageReceived = (receivedMessage: string) => {
     console.log("收到的消息:", receivedMessage);
+
     // 获取当前时间戳
-    const timestamp1 = Date.now();  // 当前时间的毫秒数 (Unix 时间戳)
+    const timestamp1 = Date.now(); // 当前时间的毫秒数 (Unix 时间戳)
     // 获取当前时间的可读格式 (可选)
-    const readableTime = new Date(timestamp1).toLocaleString();  // 格式化为本地时间
-    const messageArray:Array<string> = receivedMessage.split('|#|')
+    const readableTime = new Date(timestamp1).toLocaleString(); // 格式化为本地时间
+    const messageArray: Array<string> = receivedMessage.split('|#|')
     const str = messageArray[0] + '->' + this.Id;
+    const decryptedMessage = encryptor.decrypt(messageArray[1]);
+    console.log("解密后的消息:", decryptedMessage);
     let friend: string = AppStorage.get(str) || '';
-    if(friend!==''){
-      let newMessage:string = friend+'^||^'+messageArray[1]+'#|#'+timestamp1+'#|#'+readableTime;
-      AppStorage.set(str,newMessage);
-    }else {
-      let newMessage:string = messageArray[1]+'#|#'+timestamp1+'#|#'+readableTime;
-      AppStorage.setOrCreate(str,newMessage)
+    if (friend !== '') {
+      let newMessage: string = friend + '^||^' + decryptedMessage + '#|#' + timestamp1 + '#|#' + readableTime;
+      AppStorage.set(str, newMessage);
+    } else {
+      let newMessage: string = decryptedMessage + '#|#' + timestamp1 + '#|#' + readableTime;
+      AppStorage.setOrCreate(str, newMessage)
     }
-    this.updateFriendsList()
+    this.updateChatList()
   }
 }
 
@@ -72,7 +77,7 @@ onPageShow(): void {
 
 }
 
-  updateFriendsList(): void {
+  updateChatList(): void {
     this.Chat = [];
     const Chat: Array<Chat> = [];
     if (this.friends.length == 0) {
@@ -145,15 +150,23 @@ onPageShow(): void {
           TabContent() {
             Column() {
               Title()
-              List() {
-                ForEach(this.Chat, (item: Chat) => {
-                  ListItem() {
-                    ChatItem({ Id:item.id,image:item.avatar_Url, name:item.name ,username:item.Username,content:item.content,time:item.time})
-                  }
-                }, (item: Chat) => item.id)
+              Refresh({ refreshing: $$this.isRefreshing }) {
+                List() {
+                  ForEach(this.Chat, (item: Chat) => {
+                    ListItem() {
+                      ChatItem({ Id:item.id,image:item.avatar_Url, name:item.name ,username:item.Username,content:item.content,time:item.time})
+                    }
+                  }, (item: Chat) => item.id)
+                }
+                .height('92%')
+                .width('100%')
               }
-              .height('100%')
-              .width('100%')
+              .onRefreshing(() => {
+                this.updateChatList();
+                setTimeout(() => {
+                  this.isRefreshing = false
+                }, 1000)
+              })
             }
           }
           .tabBar(this.TabBuilder('首页', 0, "Page_image/home1.png", "Page_image/home2.png"))
@@ -173,10 +186,14 @@ onPageShow(): void {
           }
           .tabBar(this.TabBuilder('我的', 3, "Page_image/me1.png", "Page_image/me2.png"))
         }
+        .height('100%')
+        .width('100%')
         .onChange((index) => {
           this.currentIndex = index;
         })
     }
+    .height('100%')
+    .width('100%')
   }
   @Builder TabBuilder(title: string, targetIndex: number, selectedImg: string, normalImg: string) {
     Column() {
